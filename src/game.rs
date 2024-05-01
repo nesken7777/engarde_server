@@ -3,7 +3,6 @@ use rand::prelude::SliceRandom;
 
 const MOST_LEFT_SIDE: u8 = 1;
 const MOST_RIGHT_SIDE: u8 = 23;
-const MAX_WIN: u32 = 1000;
 
 struct Yamafuda;
 impl Yamafuda {
@@ -22,11 +21,11 @@ pub struct Board {
     p0_score: u32,
     p1_score: u32,
     //この中のu8はカード番号
-    pub yamafuda: Vec<u8>,
+    yamafuda: Vec<u8>,
 }
 
 impl Board {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             p0_pos: MOST_LEFT_SIDE,
             p1_pos: MOST_RIGHT_SIDE,
@@ -48,6 +47,10 @@ impl Board {
             PlayerID::Zero => self.p0_score,
             PlayerID::One => self.p1_score,
         }
+    }
+
+    pub fn yamafuda(&self) -> &[u8] {
+        &self.yamafuda
     }
 
     fn score_mut(&mut self, id: PlayerID) -> &mut u32 {
@@ -133,10 +136,14 @@ pub struct GameManager {
     board: Board,
     first_player: PlayerID,
     game_end: Option<PlayerID>,
+    max_win: u32,
 }
 
 impl GameManager {
-    pub fn new(p0_hand: Vec<u8>, p1_hand: Vec<u8>, board: Board) -> Self {
+    pub fn new(max_win: u32) -> Self {
+        let mut board = Board::new();
+        let p0_hand = board.yamafuda.split_off(board.yamafuda.len() - 5);
+        let p1_hand = board.yamafuda.split_off(board.yamafuda.len() - 5);
         Self {
             p0: Player {
                 id: PlayerID::Zero,
@@ -149,6 +156,7 @@ impl GameManager {
             first_player: PlayerID::Zero,
             board,
             game_end: None,
+            max_win,
         }
     }
     pub fn first_player(&self) -> PlayerID {
@@ -198,14 +206,14 @@ impl GameManager {
         match have0.cmp(&have1) {
             std::cmp::Ordering::Less => {
                 self.board.p1_score += 1;
-                if self.board.p1_score >= MAX_WIN {
+                if self.board.p1_score >= self.max_win {
                     self.game_end = Some(PlayerID::One);
                 }
                 Kekka::REnd(Some(PlayerID::One))
             }
             std::cmp::Ordering::Greater => {
                 self.board.p0_score += 1;
-                if self.board.p0_score >= MAX_WIN {
+                if self.board.p0_score >= self.max_win {
                     self.game_end = Some(PlayerID::Zero);
                 }
                 Kekka::REnd(Some(PlayerID::Zero))
@@ -216,14 +224,14 @@ impl GameManager {
                 match distance_from_opposite_0.cmp(&distance_from_opposite_1) {
                     std::cmp::Ordering::Less => {
                         self.board.p0_score += 1;
-                        if self.board.p0_score >= MAX_WIN {
+                        if self.board.p0_score >= self.max_win {
                             self.game_end = Some(PlayerID::Zero);
                         }
                         Kekka::REnd(Some(PlayerID::Zero))
                     }
                     std::cmp::Ordering::Greater => {
                         self.board.p1_score += 1;
-                        if self.board.p1_score >= MAX_WIN {
+                        if self.board.p1_score >= self.max_win {
                             self.game_end = Some(PlayerID::One);
                         }
                         Kekka::REnd(Some(PlayerID::One))
@@ -235,7 +243,7 @@ impl GameManager {
     }
     fn round_end_attack(&mut self, id: PlayerID) -> Kekka {
         *self.board.score_mut(id) += 1;
-        if self.board.score(id) >= MAX_WIN {
+        if self.board.score(id) >= self.max_win {
             self.game_end = Some(id);
         }
         Kekka::REnd(Some(id))

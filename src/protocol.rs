@@ -1,13 +1,13 @@
 use std::{error::Error, fmt::Display};
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use serde_aux::prelude::*;
 use serde_json::Value;
 use serde_with::skip_serializing_none;
 
 use crate::{errors::Errors, game::Board};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PlayerID {
     Zero,
     One,
@@ -68,6 +68,15 @@ impl<'de> Deserialize<'de> for PlayerID {
     }
 }
 
+impl Serialize for PlayerID {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_u8(self.denote())
+    }
+}
+
 #[derive(Serialize, Debug)]
 pub struct BoardInfo {
     #[serde(rename = "Type")]
@@ -115,7 +124,7 @@ impl BoardInfo {
             player_position_1: board.pos(PlayerID::One),
             player_score_0: board.score(PlayerID::Zero),
             player_score_1: board.score(PlayerID::One),
-            num_of_deck: board.yamafuda.len() as u8,
+            num_of_deck: board.yamafuda().len() as u8,
             current_player: None,
         }
     }
@@ -297,7 +306,7 @@ pub struct PlayedMoveMent {
 }
 
 impl PlayedMoveMent {
-    pub fn new(play: PlayMovement) -> Self {
+    pub fn new(play: &PlayMovement) -> Self {
         Self {
             typ: "Played",
             from: "Server",
@@ -332,7 +341,7 @@ pub struct PlayedAttack {
 }
 
 impl PlayedAttack {
-    pub fn new(play: PlayAttack) -> Self {
+    pub fn new(play: &PlayAttack) -> Self {
         Self {
             typ: "Played",
             from: "Server",
@@ -438,7 +447,7 @@ pub struct ServerError {
 }
 
 impl ServerError {
-    pub fn new(string:&'static str) -> Self {
+    pub fn new(string: &'static str) -> Self {
         Self {
             typ: "Error",
             from: "Server",
@@ -448,19 +457,6 @@ impl ServerError {
         }
     }
 }
-
-//ゲーム中に繰り返し受信されるJSON達
-// ConnectionStartとNameReceivedは最初しか来ないので除外
-// pub enum Messages {
-//     BoardInfo(BoardInfo),
-//     HandInfo(HandInfo),
-//     DoPlay(DoPlay),
-//     Accept(Accept),
-//     Played(Played),
-//     RoundEnd(RoundEnd),
-//     GameEnd(GameEnd),
-//     ServerError(ServerError),
-// }
 
 #[derive(Debug)]
 pub struct ParseMessageError {
@@ -484,11 +480,11 @@ pub struct ConnectionStart {
     #[serde(rename = "To")]
     to: &'static str,
     #[serde(rename = "ClientID")]
-    pub client_id: u8,
+    pub client_id: PlayerID,
 }
 
 impl ConnectionStart {
-    pub fn new(id: u8) -> Self {
+    pub fn new(id: PlayerID) -> Self {
         Self {
             typ: "ConnectionStart",
             from: "Server",
@@ -628,19 +624,3 @@ impl Messages {
         }
     }
 }
-
-// pub struct PlayerProperty {
-//     pub id: PlayerID,
-//     pub hand: Vec<u8>,
-//     pub position: u8,
-// }
-
-// impl PlayerProperty {
-//     pub fn new(id: PlayerID) -> Self {
-//         Self {
-//             id,
-//             hand: Vec::new(),
-//             position: 0,
-//         }
-//     }
-// }
