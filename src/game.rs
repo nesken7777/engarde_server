@@ -253,14 +253,14 @@ impl GameManager {
         id: PlayerID,
         movement: &PlayMovement,
     ) -> Result<Kekka, &'static str> {
-        match self.player(id).card_pos(movement.play_card) {
+        match self.player(id).card_pos(movement.play_card()) {
             Some(index) => {
                 if self
                     .player(id)
-                    .can_move(&self.board, movement.play_card, movement.direction)
+                    .can_move(&self.board, movement.play_card(), movement.direction())
                 {
                     self.player_mut(id).remove_card(index);
-                    self.move_player(id, movement.direction, movement.play_card);
+                    self.move_player(id, movement.direction(), movement.play_card());
                     // 相手の詰み確認
                     if !self.player(id.opposite()).can_actions(&self.board) {
                         return Ok(Kekka::REnd(Some(id)));
@@ -287,11 +287,11 @@ impl GameManager {
         id: PlayerID,
         attack: &PlayAttack,
     ) -> Result<Kekka, &'static str> {
-        let indicies = self.player(id).card_positions(attack.play_card);
-        if indicies.len() as u8 >= attack.num_of_card
-            && self.player(id).can_attack(&self.board, attack.play_card)
+        let indicies = self.player(id).card_positions(attack.play_card());
+        if indicies.len() as u8 >= attack.num_of_card()
+            && self.player(id).can_attack(&self.board, attack.play_card())
         {
-            let indicies_opposite = self.player(id.opposite()).card_positions(attack.play_card);
+            let indicies_opposite = self.player(id.opposite()).card_positions(attack.play_card());
             if indicies_opposite.len() >= indicies.len() {
                 indicies_opposite
                     .into_iter()

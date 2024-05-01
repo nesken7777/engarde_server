@@ -497,13 +497,13 @@ impl ConnectionStart {
 #[derive(Deserialize)]
 pub struct PlayerName {
     #[serde(rename = "Type")]
-    pub typ: &'static str,
+    typ: &'static str,
     #[serde(rename = "From")]
-    pub from: &'static str,
+    from: &'static str,
     #[serde(rename = "To")]
-    pub to: &'static str,
+    to: &'static str,
     #[serde(rename = "Name")]
-    pub name: String,
+    name: String,
 }
 
 #[derive(Serialize, Debug)]
@@ -520,72 +520,91 @@ pub struct NameReceived {
 #[derive(Deserialize)]
 pub struct Evaluation {
     #[serde(rename = "Type")]
-    pub typ: String,
+    typ: String,
     #[serde(rename = "From")]
-    pub from: String,
+    from: String,
     #[serde(rename = "To")]
-    pub to: String,
+    to: String,
     #[serde(rename = "1F", default)]
-    pub eval_1f: Option<String>,
+    eval_1f: Option<String>,
     #[serde(rename = "1B", default)]
-    pub eval_1b: Option<String>,
+    eval_1b: Option<String>,
     #[serde(rename = "2F", default)]
-    pub eval_2f: Option<String>,
+    eval_2f: Option<String>,
     #[serde(rename = "2B", default)]
-    pub eval_2b: Option<String>,
+    eval_2b: Option<String>,
     #[serde(rename = "3F", default)]
-    pub eval_3f: Option<String>,
+    eval_3f: Option<String>,
     #[serde(rename = "3B", default)]
-    pub eval_3b: Option<String>,
+    eval_3b: Option<String>,
     #[serde(rename = "4F", default)]
-    pub eval_4f: Option<String>,
+    eval_4f: Option<String>,
     #[serde(rename = "4B", default)]
-    pub eval_4b: Option<String>,
+    eval_4b: Option<String>,
     #[serde(rename = "5F", default)]
-    pub eval_5f: Option<String>,
+    eval_5f: Option<String>,
     #[serde(rename = "5B", default)]
-    pub eval_5b: Option<String>,
+    eval_5b: Option<String>,
 }
 
 #[derive(Deserialize)]
 pub struct PlayMovement {
     #[serde(rename = "Type")]
-    pub typ: String,
+    typ: String,
     #[serde(rename = "From")]
-    pub from: String,
+    from: String,
     #[serde(rename = "To")]
-    pub to: String,
+    to: String,
     #[serde(rename = "MessageID")]
-    pub message_id: String,
+    message_id: String,
     #[serde(
         rename = "PlayCard",
         deserialize_with = "deserialize_number_from_string"
     )]
-    pub play_card: u8,
+    play_card: u8,
     #[serde(rename = "Direction")]
-    pub direction: Direction,
+    direction: Direction,
+}
+
+impl PlayMovement {
+    pub fn play_card(&self) -> u8 {
+        self.play_card
+    }
+    pub fn direction(&self) -> Direction {
+        self.direction
+    }
 }
 
 #[derive(Deserialize)]
 pub struct PlayAttack {
     #[serde(rename = "Type")]
-    pub typ: String,
+    typ: String,
     #[serde(rename = "From")]
-    pub from: String,
+    from: String,
     #[serde(rename = "To")]
-    pub to: String,
+    to: String,
     #[serde(rename = "MessageID")]
-    pub message_id: String,
+    message_id: String,
     #[serde(
         rename = "PlayCard",
         deserialize_with = "deserialize_number_from_string"
     )]
-    pub play_card: u8,
+    play_card: u8,
     #[serde(
         rename = "NumOfCard",
         deserialize_with = "deserialize_number_from_string"
     )]
-    pub num_of_card: u8,
+    num_of_card: u8,
+}
+
+impl PlayAttack {
+    pub fn play_card(&self) -> u8 {
+        self.play_card
+    }
+
+    pub fn num_of_card(&self) -> u8 {
+        self.num_of_card
+    }
 }
 
 pub enum Messages {
