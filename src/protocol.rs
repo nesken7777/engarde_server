@@ -73,8 +73,39 @@ impl Serialize for PlayerID {
     where
         S: Serializer,
     {
-        serializer.serialize_u8(self.denote())
+        serializer.serialize_str(self.denote().to_string().as_str())
     }
+}
+
+fn serialize_u8_as_string<S>(num: &u8, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(&num.to_string())
+}
+
+fn serialize_i8_as_string<S>(num: &i8, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(&num.to_string())
+}
+
+fn serialize_option_u8_as_string<S>(num: &Option<u8>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match num {
+        Some(num) => serializer.serialize_str(&num.to_string()),
+        None => serializer.serialize_none(),
+    }
+}
+
+fn serialize_u32_as_string<S>(num: &u32, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_str(&num.to_string())
 }
 
 #[derive(Serialize, Debug)]
@@ -87,31 +118,36 @@ pub struct BoardInfo {
     to: &'static str,
     #[serde(
         rename = "PlayerPosition_0",
-        deserialize_with = "deserialize_number_from_string"
+        deserialize_with = "deserialize_number_from_string",
+        serialize_with = "serialize_u8_as_string"
     )]
     pub player_position_0: u8,
     #[serde(
         rename = "PlayerPosition_1",
-        deserialize_with = "deserialize_number_from_string"
+        deserialize_with = "deserialize_number_from_string",
+        serialize_with = "serialize_u8_as_string"
     )]
     pub player_position_1: u8,
     #[serde(
         rename = "PlayerScore_0",
-        deserialize_with = "deserialize_number_from_string"
+        deserialize_with = "deserialize_number_from_string",
+        serialize_with = "serialize_u32_as_string"
     )]
     pub player_score_0: u32,
     #[serde(
         rename = "PlayerScore_1",
-        deserialize_with = "deserialize_number_from_string"
+        deserialize_with = "deserialize_number_from_string",
+        serialize_with = "serialize_u32_as_string"
     )]
     pub player_score_1: u32,
     #[serde(
         rename = "NumofDeck",
-        deserialize_with = "deserialize_number_from_string"
+        deserialize_with = "deserialize_number_from_string",
+        serialize_with = "serialize_u8_as_string"
     )]
     pub num_of_deck: u8,
     #[serde(rename = "CurrentPlayer", default)]
-    pub current_player: Option<PlayerID>,
+    pub current_player: PlayerID,
 }
 
 impl BoardInfo {
@@ -125,7 +161,7 @@ impl BoardInfo {
             player_score_0: board.score(PlayerID::Zero),
             player_score_1: board.score(PlayerID::One),
             num_of_deck: board.yamafuda().len() as u8,
-            current_player: None,
+            current_player: board.current_player(),
         }
     }
 }
@@ -138,22 +174,34 @@ pub struct HandInfo {
     from: &'static str,
     #[serde(rename = "To")]
     to: &'static str,
-    #[serde(rename = "Hand1", deserialize_with = "deserialize_number_from_string")]
+    #[serde(
+        rename = "Hand1",
+        deserialize_with = "deserialize_number_from_string",
+        serialize_with = "serialize_u8_as_string"
+    )]
     pub hand1: u8,
-    #[serde(rename = "Hand2", deserialize_with = "deserialize_number_from_string")]
+    #[serde(
+        rename = "Hand2",
+        deserialize_with = "deserialize_number_from_string",
+        serialize_with = "serialize_u8_as_string"
+    )]
     pub hand2: u8,
-    #[serde(rename = "Hand3", deserialize_with = "deserialize_number_from_string")]
+    #[serde(
+        rename = "Hand3",
+        deserialize_with = "deserialize_number_from_string",
+        serialize_with = "serialize_u8_as_string"
+    )]
     pub hand3: u8,
     #[serde(
         rename = "Hand4",
-        default,
-        deserialize_with = "deserialize_option_number_from_string"
+        serialize_with = "serialize_option_u8_as_string",
+        skip_serializing_if = "Option::is_none"
     )]
     pub hand4: Option<u8>,
     #[serde(
         rename = "Hand5",
-        default,
-        deserialize_with = "deserialize_option_number_from_string"
+        serialize_with = "serialize_option_u8_as_string",
+        skip_serializing_if = "Option::is_none"
     )]
     pub hand5: Option<u8>,
 }
@@ -181,10 +229,7 @@ pub struct DoPlay {
     from: &'static str,
     #[serde(rename = "To")]
     to: &'static str,
-    #[serde(
-        rename = "MessageID",
-        deserialize_with = "deserialize_number_from_string"
-    )]
+    #[serde(rename = "MessageID", serialize_with = "serialize_u8_as_string")]
     pub message_id: u8,
     #[serde(rename = "Message")]
     message: &'static str,
@@ -270,14 +315,14 @@ impl<'de> Deserialize<'de> for Direction {
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Movement {
-    pub card: u8,
-    pub direction: Direction,
+    card: u8,
+    direction: Direction,
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Attack {
-    pub card: u8,
-    pub quantity: u8,
+    card: u8,
+    quantity: u8,
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -296,10 +341,7 @@ pub struct PlayedMoveMent {
     to: &'static str,
     #[serde(rename = "MessageID")]
     pub message_id: &'static str,
-    #[serde(
-        rename = "PlayCard",
-        deserialize_with = "deserialize_number_from_string"
-    )]
+    #[serde(rename = "PlayCard", serialize_with = "serialize_u8_as_string")]
     pub play_card: u8,
     #[serde(rename = "Direction")]
     pub direction: String,
@@ -328,15 +370,9 @@ pub struct PlayedAttack {
     to: &'static str,
     #[serde(rename = "MessageID")]
     pub message_id: &'static str,
-    #[serde(
-        rename = "PlayCard",
-        deserialize_with = "deserialize_number_from_string"
-    )]
+    #[serde(rename = "PlayCard", serialize_with = "serialize_u8_as_string")]
     pub play_card: u8,
-    #[serde(
-        rename = "NumOfCard",
-        deserialize_with = "deserialize_number_from_string"
-    )]
+    #[serde(rename = "NumOfCard", serialize_with = "serialize_u8_as_string")]
     pub num_of_card: u8,
 }
 
@@ -361,14 +397,11 @@ pub struct RoundEnd {
     from: &'static str,
     #[serde(rename = "To")]
     to: &'static str,
-    #[serde(
-        rename = "RWinner",
-        deserialize_with = "deserialize_number_from_string"
-    )]
+    #[serde(rename = "RWinner", serialize_with = "serialize_i8_as_string")]
     pub round_winner: i8,
-    #[serde(rename = "Score0", deserialize_with = "deserialize_number_from_string")]
+    #[serde(rename = "Score0", serialize_with = "serialize_u32_as_string")]
     pub score_0: u32,
-    #[serde(rename = "Score1", deserialize_with = "deserialize_number_from_string")]
+    #[serde(rename = "Score1", serialize_with = "serialize_u32_as_string")]
     pub score_1: u32,
     #[serde(rename = "Message")]
     pub message: &'static str,
@@ -407,11 +440,11 @@ pub struct GameEnd {
     from: &'static str,
     #[serde(rename = "To")]
     to: &'static str,
-    #[serde(rename = "Winner", deserialize_with = "deserialize_number_from_string")]
+    #[serde(rename = "Winner", serialize_with = "serialize_u8_as_string")]
     pub winner: u8,
-    #[serde(rename = "Score0", deserialize_with = "deserialize_number_from_string")]
+    #[serde(rename = "Score0", serialize_with = "serialize_u32_as_string")]
     pub score_0: u32,
-    #[serde(rename = "Score1", deserialize_with = "deserialize_number_from_string")]
+    #[serde(rename = "Score1", serialize_with = "serialize_u32_as_string")]
     pub score_1: u32,
     #[serde(rename = "Message")]
     pub message: &'static str,
@@ -509,11 +542,21 @@ pub struct PlayerName {
 #[derive(Serialize, Debug)]
 pub struct NameReceived {
     #[serde(rename = "Type")]
-    typ: String,
+    typ: &'static str,
     #[serde(rename = "From")]
-    from: String,
+    from: &'static str,
     #[serde(rename = "To")]
-    to: String,
+    to: &'static str,
+}
+
+impl NameReceived {
+    pub fn new() -> Self {
+        Self {
+            typ: "NameReceived",
+            from: "Server",
+            to: "Client",
+        }
+    }
 }
 
 #[skip_serializing_none]

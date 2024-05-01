@@ -22,6 +22,7 @@ pub struct Board {
     p1_score: u32,
     //この中のu8はカード番号
     yamafuda: Vec<u8>,
+    current_player: PlayerID,
 }
 
 impl Board {
@@ -32,6 +33,7 @@ impl Board {
             p0_score: 0,
             p1_score: 0,
             yamafuda: Yamafuda::create(),
+            current_player: PlayerID::Zero,
         }
     }
 
@@ -51,6 +53,10 @@ impl Board {
 
     pub fn yamafuda(&self) -> &[u8] {
         &self.yamafuda
+    }
+
+    pub fn current_player(&self) -> PlayerID {
+        self.current_player
     }
 
     fn score_mut(&mut self, id: PlayerID) -> &mut u32 {
@@ -159,11 +165,9 @@ impl GameManager {
             max_win,
         }
     }
-    pub fn first_player(&self) -> PlayerID {
-        self.first_player
-    }
     pub fn change_first_player(&mut self) {
         self.first_player = self.first_player.opposite();
+        *self.current_playerid_mut() = self.first_player;
     }
     pub fn player(&self, id: PlayerID) -> &Player {
         match id {
@@ -179,6 +183,9 @@ impl GameManager {
     }
     pub fn board(&self) -> &Board {
         &self.board
+    }
+    pub fn current_playerid_mut(&mut self) -> &mut PlayerID {
+        &mut self.board.current_player
     }
     pub fn ended(&self) -> Option<PlayerID> {
         self.game_end
@@ -291,7 +298,9 @@ impl GameManager {
         if indicies.len() as u8 >= attack.num_of_card()
             && self.player(id).can_attack(&self.board, attack.play_card())
         {
-            let indicies_opposite = self.player(id.opposite()).card_positions(attack.play_card());
+            let indicies_opposite = self
+                .player(id.opposite())
+                .card_positions(attack.play_card());
             if indicies_opposite.len() >= indicies.len() {
                 indicies_opposite
                     .into_iter()
