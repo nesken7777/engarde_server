@@ -1,37 +1,27 @@
+mod client_manager;
 mod errors;
 mod game;
 mod protocol;
 use std::{
-    io::{self, BufRead, BufReader, BufWriter, Read, Write},
-    net::{SocketAddr, TcpListener, TcpStream},
+    io::{self, stdout, BufReader, BufWriter, Write},
+    net::{SocketAddr, TcpListener},
+    thread,
 };
 
-use errors::Errors;
-use game::{Board, GameManager, Kekka};
+use game::{GameManager, Kekka};
 use protocol::{
     BoardInfo, ConnectionStart, DoPlay, GameEnd, HandInfo, Messages, PlayedAttack, PlayedMoveMent,
     PlayerID, RoundEnd, ServerError,
 };
-use serde::Serialize;
 
-fn read_stream<T>(bufreader: &mut BufReader<T>) -> io::Result<String>
-where
-    T: Read,
-{
-    let mut string = String::new();
-    bufreader.read_line(&mut string)?;
-    Ok(string.trim().to_string())
-}
+use crate::client_manager::{Client, ClientManager};
 
-fn send_info<W, T>(writer: &mut BufWriter<W>, info: &T) -> Result<(), Errors>
-where
-    W: Write,
-    T: Serialize,
-{
-    let string = format!("{}\r\n", serde_json::to_string(info)?);
-    writer.write_all(string.as_bytes())?;
-    writer.flush()?;
-    Ok(())
+const MAX_WIN: u32 = 1000;
+
+fn print(string: &str) -> io::Result<()> {
+    let mut stdout = stdout();
+    stdout.write_all(string.as_bytes())?;
+    stdout.flush()
 }
 
 enum ProcessResult {
@@ -41,56 +31,79 @@ enum ProcessResult {
 
 fn process_turn(
     game_manager: &mut GameManager,
+    client_manager: &mut ClientManager,
     current_player: PlayerID,
-    player_reader: &mut BufReader<TcpStream>,
-    player_writer: &mut BufWriter<TcpStream>,
-    opposite_writer: &mut BufWriter<TcpStream>,
-) -> Result<ProcessResult, Errors> {
-    send_info(
-        player_writer,
+) -> io::Result<ProcessResult> {
+    client_manager.send(
+        current_player,
         &HandInfo::from_vec(game_manager.player(current_player).hand()),
     )?;
-    send_info(player_writer, &DoPlay::new())?;
+    client_manager.send(current_player, &DoPlay::new())?;
 
-    match Messages::parse(&read_stream(player_reader)?)? {
-        Messages::Eval(_) => match Messages::parse(&read_stream(player_reader)?)? {
-            Messages::Eval(_) => {
-                send_info(player_writer, &ServerError::new("行動してください"))?;
-                Ok(ProcessResult::ReTry)
-            }
-            Messages::PlayM(movement) => {
-                match game_manager.play_movement(current_player, &movement) {
-                    r @ Ok(Kekka::Continue) => {
-                        send_info(opposite_writer, &PlayedMoveMent::new(movement))?;
-                        Ok(r.map(ProcessResult::Success)?)
-                    }
-                    r @ Ok(Kekka::REnd(None)) => Ok(r.map(ProcessResult::Success)?),
-                    r @ Ok(Kekka::REnd(Some(_))) => Ok(r.map(ProcessResult::Success)?),
-                    Err(string) => {
-                        send_info(player_writer, &ServerError::new(string))?;
-                        Ok(ProcessResult::ReTry)
-                    }
-                }
-            }
-            Messages::PlayA(attack) => match game_manager.play_attack(current_player, &attack) {
-                r @ Ok(Kekka::Continue) => {
-                    send_info(opposite_writer, &PlayedAttack::new(attack))?;
-                    Ok(r.map(ProcessResult::Success)?)
-                }
-                r @ Ok(Kekka::REnd(None)) => Ok(r.map(ProcessResult::Success)?),
-                r @ Ok(Kekka::REnd(Some(_))) => Ok(r.map(ProcessResult::Success)?),
-                Err(string) => {
-                    send_info(player_writer, &ServerError::new(string))?;
+    match Messages::parse(&client_manager.read(current_player)?) {
+        Ok(message) => match message {
+            Messages::Eval(_) => match Messages::parse(&client_manager.read(current_player)?) {
+                Err(e) => {
+                    print(format!("受信メッセージエラー: {}", e).as_str())?;
+                    client_manager.send(
+                        current_player,
+                        &ServerError::new("送信されたメッセージがおかしいです"),
+                    )?;
                     Ok(ProcessResult::ReTry)
                 }
+                Ok(Messages::Eval(_)) => {
+                    client_manager.send(
+                        current_player,
+                        &ServerError::new("もうEvalは受け取りました"),
+                    )?;
+                    Ok(ProcessResult::ReTry)
+                }
+                Ok(Messages::PlayM(movement)) => {
+                    match game_manager.play_movement(current_player, &movement) {
+                        Ok(kekka @ Kekka::Continue) => {
+                            client_manager
+                                .send(current_player.opposite(), &PlayedMoveMent::new(&movement))?;
+                            Ok(ProcessResult::Success(kekka))
+                        }
+                        Ok(kekka @ Kekka::REnd(None)) => Ok(ProcessResult::Success(kekka)),
+                        Ok(kekka @ Kekka::REnd(Some(_))) => Ok(ProcessResult::Success(kekka)),
+                        Err(e) => {
+                            client_manager.send(current_player, &ServerError::new(e))?;
+                            Ok(ProcessResult::ReTry)
+                        }
+                    }
+                }
+                Ok(Messages::PlayA(attack)) => {
+                    match game_manager.play_attack(current_player, &attack) {
+                        Ok(kekka @ Kekka::Continue) => {
+                            client_manager
+                                .send(current_player.opposite(), &PlayedAttack::new(&attack))?;
+                            Ok(ProcessResult::Success(kekka))
+                        }
+                        Ok(kekka @ Kekka::REnd(None)) => Ok(ProcessResult::Success(kekka)),
+                        Ok(kekka @ Kekka::REnd(Some(_))) => Ok(ProcessResult::Success(kekka)),
+                        Err(e) => {
+                            client_manager.send(current_player, &ServerError::new(e))?;
+                            Ok(ProcessResult::ReTry)
+                        }
+                    }
+                }
             },
+            Messages::PlayM(_) => {
+                client_manager.send(current_player, &ServerError::new("先にEvalしてください"))?;
+                Ok(ProcessResult::ReTry)
+            }
+            Messages::PlayA(_) => {
+                client_manager.send(current_player, &ServerError::new("先にEvalしてください"))?;
+                Ok(ProcessResult::ReTry)
+            }
         },
-        Messages::PlayM(_) => {
-            send_info(player_writer, &ServerError::new("先にEvalしてください"))?;
-            Ok(ProcessResult::ReTry)
-        }
-        Messages::PlayA(_) => {
-            send_info(player_writer, &ServerError::new("先にEvalしてください"))?;
+        Err(e) => {
+            print(format!("受信メッセージエラー: {}", e).as_str())?;
+            client_manager.send(
+                current_player,
+                &ServerError::new("送信されたメッセージがおかしいです"),
+            )?;
             Ok(ProcessResult::ReTry)
         }
     }
@@ -98,122 +111,76 @@ fn process_turn(
 
 fn process_round(
     game_manager: &mut GameManager,
-    bufwriter0: &mut BufWriter<TcpStream>,
-    bufreader0: &mut BufReader<TcpStream>,
-    bufwriter1: &mut BufWriter<TcpStream>,
-    bufreader1: &mut BufReader<TcpStream>,
-) -> Result<(), Errors> {
+    client_manager: &mut ClientManager,
+) -> io::Result<()> {
     let mut current_player = game_manager.first_player();
     loop {
-        send_info(bufwriter0, &BoardInfo::from_board(game_manager.board()))?;
-        send_info(bufwriter1, &BoardInfo::from_board(game_manager.board()))?;
-        match current_player {
-            PlayerID::Zero => {
-                let result = process_turn(
-                    game_manager,
-                    current_player,
-                    bufreader0,
-                    bufwriter0,
-                    bufwriter1,
-                )?;
-                match result {
-                    ProcessResult::ReTry => (),
-                    ProcessResult::Success(Kekka::Continue) => {
-                        current_player = current_player.opposite()
-                    }
-                    ProcessResult::Success(Kekka::REnd(None)) => {
-                        send_info(bufwriter0, &RoundEnd::hikiwake(game_manager.board()))?;
-                        send_info(bufwriter1, &RoundEnd::hikiwake(game_manager.board()))?;
-                        game_manager.reset_round();
-                        break;
-                    }
-                    ProcessResult::Success(Kekka::REnd(Some(winner))) => {
-                        send_info(
-                            bufwriter0,
-                            &RoundEnd::win_lose(game_manager.board(), winner),
-                        )?;
-                        send_info(
-                            bufwriter1,
-                            &RoundEnd::win_lose(game_manager.board(), winner),
-                        )?;
-                        game_manager.reset_round();
-                        break;
-                    }
-                }
+        client_manager.send(PlayerID::Zero, &BoardInfo::from_board(game_manager.board()))?;
+        client_manager.send(PlayerID::One, &BoardInfo::from_board(game_manager.board()))?;
+        let result = process_turn(game_manager, client_manager, current_player)?;
+        match result {
+            ProcessResult::ReTry => {}
+            ProcessResult::Success(Kekka::Continue) => {
+                current_player = current_player.opposite();
             }
-            PlayerID::One => {
-                let result = process_turn(
-                    game_manager,
-                    current_player,
-                    bufreader1,
-                    bufwriter1,
-                    bufwriter0,
+            ProcessResult::Success(Kekka::REnd(None)) => {
+                client_manager.send(PlayerID::Zero, &RoundEnd::hikiwake(game_manager.board()))?;
+                client_manager.send(PlayerID::One, &RoundEnd::hikiwake(game_manager.board()))?;
+                game_manager.reset_round();
+                break;
+            }
+            ProcessResult::Success(Kekka::REnd(Some(winner))) => {
+                client_manager.send(
+                    PlayerID::Zero,
+                    &RoundEnd::win_lose(game_manager.board(), winner),
                 )?;
-                match result {
-                    ProcessResult::ReTry => (),
-                    ProcessResult::Success(Kekka::Continue) => {
-                        current_player = current_player.opposite()
-                    }
-                    ProcessResult::Success(Kekka::REnd(None)) => {
-                        send_info(bufwriter0, &RoundEnd::hikiwake(game_manager.board()))?;
-                        send_info(bufwriter1, &RoundEnd::hikiwake(game_manager.board()))?;
-                        game_manager.reset_round();
-                        break;
-                    }
-                    ProcessResult::Success(Kekka::REnd(Some(winner))) => {
-                        send_info(
-                            bufwriter0,
-                            &RoundEnd::win_lose(game_manager.board(), winner),
-                        )?;
-                        send_info(
-                            bufwriter1,
-                            &RoundEnd::win_lose(game_manager.board(), winner),
-                        )?;
-                        game_manager.reset_round();
-                        break;
-                    }
-                }
+                client_manager.send(
+                    PlayerID::One,
+                    &RoundEnd::win_lose(game_manager.board(), winner),
+                )?;
+                game_manager.reset_round();
+                break;
             }
         }
     }
     Ok(())
 }
 
-fn main() -> Result<(), Errors> {
+fn main() -> io::Result<()> {
     let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 12052)))?;
     let (stream0, _) = listener.accept()?;
-    let (mut bufreader0, mut bufwriter0) = (
+    let mut client0 = Client::new(
         BufReader::new(stream0.try_clone()?),
         BufWriter::new(stream0),
     );
-    send_info(&mut bufwriter0, &ConnectionStart::new(0))?;
-    read_stream(&mut bufreader0)?;
-    send_info(&mut bufwriter0, &"a".to_string())?;
+    let join0 = thread::spawn(move || -> io::Result<Client> {
+        client0.send(&ConnectionStart::new(PlayerID::Zero))?;
+        client0.read()?;
+        client0.send(&"a")?;
+        Ok(client0)
+    });
     let (stream1, _) = listener.accept()?;
-    let (mut bufreader1, mut bufwriter1) = (
+    let mut client1 = Client::new(
         BufReader::new(stream1.try_clone()?),
         BufWriter::new(stream1),
     );
-    send_info(&mut bufwriter1, &ConnectionStart::new(1))?;
-    read_stream(&mut bufreader1)?;
-    send_info(&mut bufwriter1, &"a".to_string())?;
-    let mut board = Board::new();
-    let p0_hand = board.yamafuda.split_off(board.yamafuda.len() - 5);
-    let p1_hand = board.yamafuda.split_off(board.yamafuda.len() - 5);
-    let mut game_manager = GameManager::new(p0_hand, p1_hand, board);
+    let join1 = thread::spawn(move || -> io::Result<Client> {
+        client1.send(&ConnectionStart::new(PlayerID::One))?;
+        client1.read()?;
+        client1.send(&"a")?;
+        Ok(client1)
+    });
+    let client0 = join0.join().expect("join失敗")?;
+    let client1 = join1.join().expect("join失敗")?;
+    let mut client_manager = ClientManager::new(client0, client1);
+    let mut game_manager = GameManager::new(MAX_WIN);
     loop {
-        process_round(
-            &mut game_manager,
-            &mut bufwriter0,
-            &mut bufreader0,
-            &mut bufwriter1,
-            &mut bufreader1,
-        )?;
+        process_round(&mut game_manager, &mut client_manager)?;
         match game_manager.ended() {
             None => game_manager.change_first_player(),
             Some(winner) => {
-                send_info(&mut bufwriter0, &GameEnd::new(game_manager.board(), winner))?;
-                send_info(&mut bufwriter1, &GameEnd::new(game_manager.board(), winner))?;
+                client_manager.send(PlayerID::Zero, &GameEnd::new(game_manager.board(), winner))?;
+                client_manager.send(PlayerID::One, &GameEnd::new(game_manager.board(), winner))?;
                 break;
             }
         }
