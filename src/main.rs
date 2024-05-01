@@ -185,11 +185,14 @@ fn main() -> io::Result<()> {
             }
         }
     }
-    println!("ゲーム終了");
-    println!(
-        "p0: {}点, p1: {}点",
-        game_manager.board().score(PlayerID::Zero),
-        game_manager.board().score(PlayerID::One)
-    );
+    print("ゲーム終了")?;
+    print(
+        format!(
+            "p0: {}点, p1: {}点",
+            game_manager.board().score(PlayerID::Zero),
+            game_manager.board().score(PlayerID::One)
+        )
+        .as_str(),
+    )?;
     Ok(())
 }
