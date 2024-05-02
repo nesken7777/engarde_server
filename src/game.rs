@@ -280,6 +280,9 @@ impl GameManager {
                             }
                             None => return Ok(self.round_end_yamafuda()),
                         }
+                        if self.board.yamafuda.is_empty() {
+                            return Ok(self.round_end_yamafuda());
+                        }
                     }
                     Ok(Kekka::Continue)
                 } else {
@@ -323,6 +326,9 @@ impl GameManager {
                             self.player_mut(id).push_card(card);
                         }
                         None => return Ok(self.round_end_yamafuda()),
+                    }
+                    if self.board.yamafuda.is_empty() {
+                        return Ok(self.round_end_yamafuda());
                     }
                 }
                 Ok(Kekka::Continue)
