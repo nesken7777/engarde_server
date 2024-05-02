@@ -89,7 +89,7 @@ impl Player {
             }
             (PlayerID::One, Direction::Back) => board.pos(self.id) + card <= MOST_RIGHT_SIDE,
             (PlayerID::One, Direction::Forward) => {
-                board.pos(self.id) - card > board.pos(self.id.opposite())
+                board.pos(self.id).saturating_sub(card) > board.pos(self.id.opposite())
             }
         }
     }
