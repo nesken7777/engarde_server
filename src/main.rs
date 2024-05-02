@@ -3,6 +3,7 @@ mod errors;
 mod game;
 mod protocol;
 use std::{
+    env::args,
     io::{self, stdout, BufReader, BufWriter, Write},
     net::{SocketAddr, TcpListener},
     thread,
@@ -16,7 +17,7 @@ use protocol::{
 
 use crate::client_manager::{Client, ClientManager};
 
-const MAX_WIN: u32 = 1000;
+const MAX_WIN: u32 = 10000;
 
 fn print(string: &str) -> io::Result<()> {
     let mut stdout = stdout();
@@ -197,7 +198,13 @@ fn main() -> io::Result<()> {
     let client0 = join0.join().expect("join失敗")?;
     let client1 = join1.join().expect("join失敗")?;
     let mut client_manager = ClientManager::new(client0, client1);
-    let mut game_manager = GameManager::new(MAX_WIN);
+    let mut game_manager = GameManager::new(
+        args()
+            .nth(1)
+            .unwrap_or("".to_string())
+            .parse()
+            .unwrap_or(MAX_WIN),
+    );
     loop {
         process_round(&mut game_manager, &mut client_manager)?;
         game_manager.reset_round();
