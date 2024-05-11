@@ -198,13 +198,8 @@ fn main() -> io::Result<()> {
     let client0 = join0.join().expect("join失敗")?;
     let client1 = join1.join().expect("join失敗")?;
     let mut client_manager = ClientManager::new(client0, client1);
-    let mut game_manager = GameManager::new(
-        args()
-            .nth(1)
-            .unwrap_or("".to_string())
-            .parse()
-            .unwrap_or(MAX_WIN),
-    );
+    let mut game_manager =
+        GameManager::new((|| args().nth(1)?.parse::<u32>().ok())().unwrap_or(MAX_WIN));
     loop {
         process_round(&mut game_manager, &mut client_manager)?;
         game_manager.reset_round();
