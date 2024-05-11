@@ -17,7 +17,7 @@ use protocol::{
 
 use crate::client_manager::{Client, ClientManager};
 
-const MAX_WIN: u32 = 10000;
+const MAX_WIN: u32 = 100;
 
 fn print(string: &str) -> io::Result<()> {
     let mut stdout = stdout();
