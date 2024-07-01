@@ -255,6 +255,13 @@ impl GameManager {
         }
         Kekka::REnd(Some(id))
     }
+    fn round_end_tumi(&mut self, id: PlayerID) -> Kekka {
+        *self.board.score_mut(id) += 1;
+        if self.board.score(id) >= self.max_win {
+            self.game_end = Some(id);
+        }
+        Kekka::REnd(Some(id))
+    }
     pub fn play_movement(
         &mut self,
         id: PlayerID,
@@ -270,7 +277,7 @@ impl GameManager {
                     self.move_player(id, movement.direction(), movement.play_card());
                     // 相手の詰み確認
                     if !self.player(id.opposite()).can_actions(&self.board) {
-                        return Ok(Kekka::REnd(Some(id)));
+                        return Ok(self.round_end_tumi(id));
                     }
                     // 回収作業
                     while self.player(id).hand().len() < 5 {
