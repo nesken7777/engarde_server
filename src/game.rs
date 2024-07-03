@@ -142,11 +142,11 @@ pub struct GameManager {
     board: Board,
     first_player: PlayerID,
     game_end: Option<PlayerID>,
-    max_win: u32,
+    max_round: u32,
 }
 
 impl GameManager {
-    pub fn new(max_win: u32) -> Self {
+    pub fn new(max_round: u32) -> Self {
         let mut board = Board::new();
         let p0_hand = board.yamafuda.split_off(board.yamafuda.len() - 5);
         let p1_hand = board.yamafuda.split_off(board.yamafuda.len() - 5);
@@ -162,7 +162,7 @@ impl GameManager {
             first_player: PlayerID::Zero,
             board,
             game_end: None,
-            max_win,
+            max_round,
         }
     }
     pub fn change_first_player(&mut self) {
@@ -190,6 +190,13 @@ impl GameManager {
     pub fn ended(&self) -> Option<PlayerID> {
         self.game_end
     }
+    pub fn kattahou(&self) -> PlayerID {
+        match self.board.p0_score.cmp(&self.board.p1_score) {
+            std::cmp::Ordering::Less => PlayerID::One,
+            std::cmp::Ordering::Greater => PlayerID::Zero,
+            std::cmp::Ordering::Equal => PlayerID::Zero,
+        }
+    }
     pub fn reset_round(&mut self) {
         let mut yamafuda = Yamafuda::create();
         self.p0.hand = yamafuda.split_off(yamafuda.len() - 5);
@@ -213,15 +220,15 @@ impl GameManager {
         match have0.cmp(&have1) {
             std::cmp::Ordering::Less => {
                 self.board.p1_score += 1;
-                if self.board.p1_score >= self.max_win {
-                    self.game_end = Some(PlayerID::One);
+                if self.board.p0_score + self.board.p1_score >= self.max_round {
+                    self.game_end = Some(self.kattahou());
                 }
                 Kekka::REnd(Some(PlayerID::One))
             }
             std::cmp::Ordering::Greater => {
                 self.board.p0_score += 1;
-                if self.board.p0_score >= self.max_win {
-                    self.game_end = Some(PlayerID::Zero);
+                if self.board.p0_score + self.board.p1_score >= self.max_round {
+                    self.game_end = Some(self.kattahou());
                 }
                 Kekka::REnd(Some(PlayerID::Zero))
             }
@@ -231,15 +238,15 @@ impl GameManager {
                 match distance_from_opposite_0.cmp(&distance_from_opposite_1) {
                     std::cmp::Ordering::Less => {
                         self.board.p0_score += 1;
-                        if self.board.p0_score >= self.max_win {
-                            self.game_end = Some(PlayerID::Zero);
+                        if self.board.p0_score + self.board.p1_score >= self.max_round {
+                            self.game_end = Some(self.kattahou());
                         }
                         Kekka::REnd(Some(PlayerID::Zero))
                     }
                     std::cmp::Ordering::Greater => {
                         self.board.p1_score += 1;
-                        if self.board.p1_score >= self.max_win {
-                            self.game_end = Some(PlayerID::One);
+                        if self.board.p0_score + self.board.p1_score >= self.max_round {
+                            self.game_end = Some(self.kattahou());
                         }
                         Kekka::REnd(Some(PlayerID::One))
                     }
@@ -250,15 +257,15 @@ impl GameManager {
     }
     fn round_end_attack(&mut self, id: PlayerID) -> Kekka {
         *self.board.score_mut(id) += 1;
-        if self.board.score(id) >= self.max_win {
-            self.game_end = Some(id);
+        if self.board.score(id) + self.board.score(id.opposite()) >= self.max_round {
+            self.game_end = Some(self.kattahou());
         }
         Kekka::REnd(Some(id))
     }
     fn round_end_tumi(&mut self, id: PlayerID) -> Kekka {
         *self.board.score_mut(id) += 1;
-        if self.board.score(id) >= self.max_win {
-            self.game_end = Some(id);
+        if self.board.score(id) + self.board.score(id.opposite()) >= self.max_round {
+            self.game_end = Some(self.kattahou());
         }
         Kekka::REnd(Some(id))
     }
